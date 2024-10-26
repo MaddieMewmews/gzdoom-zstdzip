@@ -37,6 +37,7 @@
 #define NOMINMAX
 #include "LzmaDec.h"
 #include "Xz.h"
+#include "ZstdDec.h"
 // CRC table needs to be generated prior to reading XZ compressed files.
 #include "7zCrc.h"
 #include <miniz.h>
@@ -654,6 +655,118 @@ public:
 
 //==========================================================================
 //
+// DecompressorZSTD
+//
+// The ZSTD wrapper
+// reads data from a ZSTD compressed stream
+//
+//==========================================================================
+
+// Wraps around a Decompressor to decompress a XZ stream
+class DecompressorZSTD : public DecompressorBase
+{
+	enum { BUFF_SIZE = 4096 };
+
+	bool SawEOF = false;
+	CZstdDecInfo Stream;
+	uint8_t InBuff[BUFF_SIZE];
+
+public:
+	bool Open(FileReader *file)
+	{
+		if (File != nullptr)
+		{
+			DecompressionError("File already open");
+			return false;
+		}
+
+		int err;
+
+		File = file;
+		FillBuffer ();
+
+		Stream.bzalloc = NULL;
+		Stream.bzfree = NULL;
+		Stream.opaque = NULL;
+
+		err = BZ2_bzDecompressInit(&Stream, 0, 0);
+
+		if (err != BZ_OK)
+		{
+			DecompressionError ("DecompressorBZ2: bzDecompressInit failed: %d\n", err);
+			return false;
+		}
+		return true;
+	}
+
+	~DecompressorZSTD ()
+	{
+		ZstdDecState_Clear (&Stream);
+	}
+
+	ptrdiff_t Read (void *buffer, ptrdiff_t len) override
+	{
+		if (File == nullptr)
+		{
+			DecompressionError("File not open");
+			return 0;
+		}
+		if (len == 0) return 0;
+
+		int err = BZ_OK;
+
+		stupidGlobal = this;
+
+		while (len > 0)
+		{
+			Stream.next_out = (char*)buffer;
+			unsigned rlen = (unsigned)std::min<ptrdiff_t>(len, 0x40000000);
+			Stream.avail_out = rlen;
+			buffer = Stream.next_out + rlen;
+			len -= rlen;
+
+			do
+			{
+				err = BZ2_bzDecompress(&Stream);
+				if (Stream.avail_in == 0 && !SawEOF)
+				{
+					FillBuffer();
+				}
+			} while (err == BZ_OK && Stream.avail_out != 0);
+		}
+
+		if (err != BZ_OK && err != BZ_STREAM_END)
+		{
+			DecompressionError ("Corrupt bzip2 stream");
+			return 0;
+		}
+
+		if (Stream.avail_out != 0)
+		{
+			DecompressionError ("Ran out of data in bzip2 stream");
+			return 0;
+		}
+
+		return len - Stream.avail_out;
+	}
+
+	void FillBuffer ()
+	{
+		auto numread = File->Read(InBuff, BUFF_SIZE);
+
+		if (numread < BUFF_SIZE)
+		{
+			SawEOF = true;
+		}
+		Stream.next_in = (char *)InBuff;
+		Stream.avail_in = (unsigned)numread;
+	}
+
+};
+
+
+//==========================================================================
+//
 // Console Doom LZSS wrapper.
 //
 //==========================================================================
@@ -901,6 +1014,18 @@ bool OpenDecompressor(FileReader& self, FileReader &parent, FileReader::Size len
 		case METHOD_XZ:
 		{
 			auto idec = new DecompressorXZ;
+			fr = dec = idec;
+			idec->EnableExceptions(exceptions);
+			if (!idec->Open(p, length))
+			{
+				delete idec;
+				return false;
+			}
+			break;
+		}
+		case METHOD_ZSTD:
+		{
+			auto idec = new DecompressorZSTD;
 			fr = dec = idec;
 			idec->EnableExceptions(exceptions);
 			if (!idec->Open(p, length))

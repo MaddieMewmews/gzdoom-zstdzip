@@ -248,7 +248,8 @@ bool FZipFile::Open(LumpFilterInfo* filter, FileSystemMessageFunc Printf)
 			zip_fh->Method != METHOD_BZIP2 &&
 			zip_fh->Method != METHOD_IMPLODE &&
 			zip_fh->Method != METHOD_SHRINK &&
-			zip_fh->Method != METHOD_XZ)
+			zip_fh->Method != METHOD_XZ && 
+			zip_fh->Method != METHOD_ZSTD)
 		{
 			Printf(FSMessageLevel::Error, "%s: '%s' uses an unsupported compression algorithm (#%d).\n", FileName, name.c_str(), zip_fh->Method);
 			skipped++;

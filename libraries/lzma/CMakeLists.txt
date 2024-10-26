@@ -41,11 +41,13 @@ add_library( lzma STATIC
 	C/Sort.c
 	C/SwapBytes.c
 	C/Threads.c
+	C/Xxh64.c
 	C/Xz.c
 	C/XzCrc64.c
 	C/XzCrc64Opt.c
 	C/XzDec.c
 	C/XzEnc.c
 	C/XzIn.c
+	C/ZstdDec.c
 )
 target_link_libraries( lzma Threads::Threads )

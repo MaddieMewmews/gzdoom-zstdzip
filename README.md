@@ -1,3 +1,5 @@
+# NOT WORKING, files_decompress.cpp's ZSTD function must be written first for ZSTD zip file support to work/not crash
+
 # Welcome to GZDoom!
 
 [![Continuous Integration](https://github.com/ZDoom/gzdoom/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/ZDoom/gzdoom/actions/workflows/continuous_integration.yml)
